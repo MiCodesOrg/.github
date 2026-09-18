@@ -8,6 +8,7 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    environment: PROD
+    permissions:
+      contents: write
     steps:
       - run: echo "package=${{ inputs.package_name }}"
