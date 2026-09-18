@@ -1,0 +1,160 @@
+name: Android Release (reusable)
+
+# Central release pipeline for MiCodes Android apps.
+# Call it from a project with:
+#
+#   jobs:
+#     release:
+#       uses: MiCodesOrg/.github/.github/workflows/android-release.yml@main
+#       with:
+#         package_name: fr.micodes.example
+#       secrets: inherit
+#
+# Required secrets (org-level shared to the repos, or per-repo):
+#   KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD, SERVICE_ACCOUNT_JSON
+
+on:
+  workflow_call:
+    inputs:
+      package_name:
+        description: Play Console application id
+        required: true
+        type: string
+      java_version:
+        description: JDK version
+        required: false
+        type: string
+        default: "17"
+      gradle_command:
+        description: Gradle command building the release artifacts
+        required: false
+        type: string
+        default: "./gradlew :app:bundleRelease"
+      aab_path:
+        description: Path to the built AAB
+        required: false
+        type: string
+        default: "app/build/outputs/bundle/release/app-release.aab"
+      apk_path:
+        description: Optional path to a built APK to attach to the GitHub Release
+        required: false
+        type: string
+        default: ""
+      mapping_path:
+        description: Optional path to the R8 mapping file
+        required: false
+        type: string
+        default: "app/build/outputs/mapping/release/mapping.txt"
+      play_track:
+        description: Play Console track
+        required: false
+        type: string
+        default: "internal"
+      environment:
+        description: GitHub environment used for the deployment
+        required: false
+        type: string
+        default: "PROD"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java_version }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          VERSION_NAME="${TAG}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${TAG%%-*}"
+          VERSION_CODE=$(( ${MAJOR:-1} * 10000 + ${MINOR:-0} * 100 + ${PATCH:-0} ))
+          echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+
+      - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${KEYSTORE_BASE64}" ]; then
+            echo "::error::KEYSTORE_BASE64 secret is empty or unset"
+            exit 1
+          fi
+
+          # Strip any whitespace/CR that base64 -d would choke on, then decode.
+          printf '%s' "${KEYSTORE_BASE64}" | tr -d '[:space:]' | base64 -d > app/release-keystore.jks
+
+          if [ ! -s app/release-keystore.jks ]; then
+            echo "::error::Decoded keystore is empty"
+            exit 1
+          fi
+
+          echo "Decoded keystore: $(wc -c < app/release-keystore.jks) bytes"
+
+          # Fail here with a clear message rather than deep inside signing.
+          keytool -list -keystore app/release-keystore.jks -storepass "${KEYSTORE_PASSWORD}" > /dev/null
+
+      - name: Build release artifacts
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.VERSION_NAME }}
+          VERSION_CODE: ${{ steps.version.outputs.VERSION_CODE }}
+          KEYSTORE_FILE: release-keystore.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ${{ inputs.gradle_command }}
+
+      - name: Collect release assets
+        id: assets
+        run: |
+          set -euo pipefail
+          FILES=""
+          for f in "${{ inputs.aab_path }}" "${{ inputs.mapping_path }}" "${{ inputs.apk_path }}"; do
+            if [ -n "${f}" ] && [ -f "${f}" ]; then
+              FILES="${FILES}${f}"$'\n'
+            fi
+          done
+          if [ -z "${FILES}" ]; then
+            echo "::error::No release assets found"
+            exit 1
+          fi
+          echo "Assets:"
+          printf '%s' "${FILES}"
+          {
+            echo "list<<EOF"
+            printf '%s' "${FILES}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload to Play Store
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ inputs.package_name }}
+          releaseFiles: ${{ inputs.aab_path }}
+          tracks: ${{ inputs.play_track }}
+          status: completed
+          releaseName: ${{ steps.version.outputs.VERSION_NAME }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: ${{ steps.assets.outputs.list }}
