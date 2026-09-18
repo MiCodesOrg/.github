@@ -20,6 +20,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   release:
     uses: MiCodesOrg/.github/.github/workflows/android-release.yml@main
