@@ -132,7 +132,7 @@ jobs:
         run: |
           set -euo pipefail
           FILES=""
-          for f in "${{ inputs.aab_path }}" "${{ inputs.mapping_path }}" "${{ inputs.apk_path }}"; do
+          for f in "${{ inputs.aab_path }}" "${{ inputs.apk_path }}"; do
             if [ -n "${f}" ] && [ -f "${f}" ]; then
               FILES="${FILES}${f}"$'\n'
             fi
@@ -148,6 +148,14 @@ jobs:
             printf '%s' "${FILES}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Upload mapping artifact (private)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mapping-${{ github.ref_name }}
+          path: ${{ inputs.mapping_path }}
+          if-no-files-found: ignore
+          retention-days: 90
 
       - name: Upload to Play Store
         uses: r0adkll/upload-google-play@v1
