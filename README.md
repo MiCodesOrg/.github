@@ -40,7 +40,7 @@ jobs:
 | `gradle_command` | `./gradlew :app:bundleRelease` | Build command |
 | `aab_path` | `app/build/outputs/bundle/release/app-release.aab` | AAB to publish |
 | `apk_path` | *(empty)* | Optional APK to attach to the GitHub Release |
-| `mapping_path` | `app/build/outputs/mapping/release/mapping.txt` | Optional R8 mapping |
+| `mapping_path` | `app/build/outputs/mapping/release/mapping.txt` | R8 mapping, uploaded as a **private** workflow artifact |
 | `play_track` | `internal` | Play track |
 | `environment` | `PROD` | GitHub environment (must exist in the caller repo) |
 
