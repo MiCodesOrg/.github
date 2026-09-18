@@ -50,16 +50,22 @@ on:
         required: false
         type: string
         default: "internal"
-      environment:
-        description: GitHub environment used for the deployment
-        required: false
-        type: string
-        default: "PROD"
+    secrets:
+      KEYSTORE_BASE64:
+        required: true
+      KEYSTORE_PASSWORD:
+        required: true
+      KEY_ALIAS:
+        required: true
+      KEY_PASSWORD:
+        required: true
+      SERVICE_ACCOUNT_JSON:
+        required: true
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    environment: PROD
     permissions:
       contents: write
 
