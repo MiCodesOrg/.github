@@ -149,6 +149,12 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+          MAPPING=""
+          if [ -n "${{ inputs.mapping_path }}" ] && [ -f "${{ inputs.mapping_path }}" ]; then
+            MAPPING="${{ inputs.mapping_path }}"
+          fi
+          echo "mapping=${MAPPING}" >> "$GITHUB_OUTPUT"
+
       - name: Upload mapping artifact (private)
         uses: actions/upload-artifact@v4
         with:
@@ -163,6 +169,7 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
           packageName: ${{ inputs.package_name }}
           releaseFiles: ${{ inputs.aab_path }}
+          mappingFile: ${{ steps.assets.outputs.mapping }}
           tracks: ${{ inputs.play_track }}
           status: completed
           releaseName: ${{ steps.version.outputs.VERSION_NAME }}
